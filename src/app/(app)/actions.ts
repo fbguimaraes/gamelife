@@ -8,6 +8,13 @@ import { createClient } from "@/lib/supabase/server";
 // em src/components/undo-toast.tsx.
 const UNDO_WINDOW_MS = 15_000;
 
+// Pontos por peso (item 2.4), definidos pelo usuário.
+const PONTOS_POR_PESO: Record<string, number> = {
+  leve: 5,
+  medio: 10,
+  dificil: 20,
+};
+
 function todayRange() {
   const now = new Date();
   const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -32,14 +39,34 @@ export async function completeActivity(activityId: string) {
     .limit(1);
 
   if (!existing || existing.length === 0) {
+    const { data: activity } = await supabase
+      .from("activities")
+      .select("peso")
+      .eq("id", activityId)
+      .single();
+
+    const pontosGanhos = activity ? PONTOS_POR_PESO[activity.peso] : 0;
+
     const { error } = await supabase.from("activity_logs").insert({
       activity_id: activityId,
       user_id: userData.user.id,
-      // Cálculo real de pontos por peso é o item 2.4 (ainda não implementado).
-      pontos_ganhos: 0,
+      pontos_ganhos: pontosGanhos,
     });
 
     if (error) throw new Error(error.message);
+
+    const { data: user } = await supabase
+      .from("users")
+      .select("pontos_totais")
+      .eq("id", userData.user.id)
+      .single();
+
+    if (user) {
+      await supabase
+        .from("users")
+        .update({ pontos_totais: user.pontos_totais + pontosGanhos })
+        .eq("id", userData.user.id);
+    }
   }
 
   revalidatePath("/");
@@ -52,14 +79,35 @@ export async function uncompleteActivity(activityId: string) {
 
   const cutoff = new Date(Date.now() - UNDO_WINDOW_MS);
 
-  const { error } = await supabase
+  const { data: deleted, error } = await supabase
     .from("activity_logs")
     .delete()
     .eq("activity_id", activityId)
     .eq("user_id", userData.user.id)
-    .gte("concluida_em", cutoff.toISOString());
+    .gte("concluida_em", cutoff.toISOString())
+    .select("pontos_ganhos");
 
   if (error) throw new Error(error.message);
+
+  const pontosRevertidos = (deleted ?? []).reduce(
+    (soma, log) => soma + log.pontos_ganhos,
+    0,
+  );
+
+  if (pontosRevertidos > 0) {
+    const { data: user } = await supabase
+      .from("users")
+      .select("pontos_totais")
+      .eq("id", userData.user.id)
+      .single();
+
+    if (user) {
+      await supabase
+        .from("users")
+        .update({ pontos_totais: user.pontos_totais - pontosRevertidos })
+        .eq("id", userData.user.id);
+    }
+  }
 
   revalidatePath("/");
 }
