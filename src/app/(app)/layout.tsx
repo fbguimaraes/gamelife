@@ -27,15 +27,27 @@ export default async function AppLayout({
   return (
     <div className="min-h-screen bg-background">
       <header className="border-b border-border">
-        <div className="mx-auto flex max-w-3xl items-center justify-between px-6 py-4">
-          <div className="flex items-center gap-6">
+        <div className="mx-auto flex max-w-3xl flex-wrap items-center justify-between gap-x-6 gap-y-3 px-4 py-4 sm:px-6">
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
             <Wordmark />
-            <nav className="flex items-center gap-4">
+            <nav className="flex flex-wrap items-center gap-x-3 gap-y-1 sm:gap-x-4">
               <Link
                 href="/atividades"
                 className="text-sm text-muted-foreground hover:text-foreground"
               >
                 Atividades
+              </Link>
+              <Link
+                href="/progresso"
+                className="text-sm text-muted-foreground hover:text-foreground"
+              >
+                Progresso
+              </Link>
+              <Link
+                href="/conquistas"
+                className="text-sm text-muted-foreground hover:text-foreground"
+              >
+                Conquistas
               </Link>
             </nav>
           </div>

@@ -13,7 +13,11 @@ export function ActivityRow({
   frequenciaLabel: string;
 }) {
   return (
-    <div className="flex items-center justify-between gap-4 rounded-md border border-border bg-surface px-4 py-3">
+    <div
+      data-testid="activity-row"
+      data-titulo={activity.titulo}
+      className="flex items-center justify-between gap-4 rounded-md border border-border bg-surface px-4 py-3"
+    >
       <div className="flex flex-col gap-1">
         <p className="text-sm font-medium text-foreground">{activity.titulo}</p>
         <p className="text-sm text-muted-foreground">

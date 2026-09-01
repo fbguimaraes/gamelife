@@ -1,122 +1,73 @@
 import { createClient } from "@/lib/supabase/server";
+import {
+  addDays,
+  evaluateDay,
+  fetchActivitiesAndLogs,
+  isoWeekdayOf,
+  startOfDay,
+  type Activity,
+} from "@/lib/day-consistency";
 
 type SupabaseServerClient = Awaited<ReturnType<typeof createClient>>;
 
-function startOfDay(date: Date) {
-  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
-}
+// Streak freeze (item 2.6), definido pelo usuário: 1 perdão por semana,
+// reabastecido toda segunda-feira (não acumula entre semanas).
+export const MAX_FREEZES_POR_SEMANA = 1;
 
-function addDays(date: Date, days: number) {
-  const result = new Date(date);
-  result.setDate(result.getDate() + days);
-  return result;
-}
-
-function isSameDay(a: Date, b: Date) {
-  return a.getTime() === b.getTime();
-}
-
-function isoWeekdayOf(date: Date) {
-  return date.getDay() === 0 ? 7 : date.getDay();
+export function inicioDaSemana(date: Date) {
+  return addDays(date, -(isoWeekdayOf(date) - 1)); // segunda-feira daquela semana
 }
 
 /**
- * Recalcula o streak geral do usuário a partir do histórico de activity_logs
- * e grava o resultado em users.streak_atual.
+ * Núcleo puro do cálculo de streak (sem I/O) — separado de
+ * `recalculateStreak` para ser testável com Vitest sem precisar de um
+ * banco de dados real (item 4.3).
  *
  * Regra (definida pelo usuário para o item 2.5): um dia conta como cumprido
  * se pelo menos 50% das atividades aplicáveis daquele dia foram concluídas.
  * Dias sem nenhuma atividade aplicável são neutros (não somam nem quebram
  * o streak). O dia de hoje nunca quebra o streak por estar incompleto,
  * já que ainda não terminou.
+ *
+ * Regra (item 2.6): quando um dia passado não atinge os 50%, o streak freeze
+ * é aplicado automaticamente se ainda houver 1 disponível naquela semana
+ * (segunda a domingo) — o dia passa a contar como cumprido em vez de
+ * quebrar a sequência, e o freeze daquela semana é consumido.
  */
-export async function recalculateStreak(
-  supabase: SupabaseServerClient,
-  userId: string
-) {
-  const { data: user } = await supabase
-    .from("users")
-    .select("criado_em")
-    .eq("id", userId)
-    .single();
-
-  if (!user) return;
-
-  const accountCreatedDay = startOfDay(new Date(user.criado_em));
-
-  const { data: activities } = await supabase
-    .from("activities")
-    .select("id, frequencia, dias_semana, criado_em")
-    .eq("ativa", true);
-
-  if (!activities || activities.length === 0) {
-    await supabase.from("users").update({ streak_atual: 0 }).eq("id", userId);
-    return;
-  }
-
-  const activityIds = activities.map((activity) => activity.id);
-  const { data: logs } = await supabase
-    .from("activity_logs")
-    .select("activity_id, concluida_em")
-    .in("activity_id", activityIds);
-
-  const logDaysByActivity = new Map<string, Date[]>();
-  for (const log of logs ?? []) {
-    const day = startOfDay(new Date(log.concluida_em));
-    const list = logDaysByActivity.get(log.activity_id) ?? [];
-    list.push(day);
-    logDaysByActivity.set(log.activity_id, list);
-  }
-  for (const list of logDaysByActivity.values()) {
-    list.sort((a, b) => a.getTime() - b.getTime());
+export function computeStreak({
+  activities,
+  logDaysByActivity,
+  accountCreatedDay,
+  hoje,
+}: {
+  activities: Activity[];
+  logDaysByActivity: Map<string, Date[]>;
+  accountCreatedDay: Date;
+  hoje: Date;
+}): { streakAtual: number; freezesDisponiveis: number } {
+  if (activities.length === 0) {
+    return { streakAtual: 0, freezesDisponiveis: MAX_FREEZES_POR_SEMANA };
   }
 
   let streak = 0;
-  let day = startOfDay(new Date());
+  let day = hoje;
   let isToday = true;
+  const freezesUsadosPorSemana = new Map<number, number>();
 
   while (day.getTime() >= accountCreatedDay.getTime()) {
-    const isoWeekday = isoWeekdayOf(day);
-    let applicableCount = 0;
-    let completedCount = 0;
+    const { applicable, completed } = evaluateDay(
+      day,
+      activities,
+      logDaysByActivity
+    );
 
-    for (const activity of activities) {
-      const activityCreatedDay = startOfDay(new Date(activity.criado_em));
-      if (day.getTime() < activityCreatedDay.getTime()) continue;
-
-      const logDays = logDaysByActivity.get(activity.id) ?? [];
-
-      if (activity.frequencia === "unica") {
-        // 'unica' some da tela do dia por completo após a primeira conclusão
-        // (decisão registrada no item 2.1) — só é aplicável em dias antes ou
-        // no exato dia dessa conclusão.
-        const firstLogDay = logDays[0];
-        const applicable = !firstLogDay || firstLogDay.getTime() >= day.getTime();
-        if (!applicable) continue;
-
-        applicableCount++;
-        if (firstLogDay && isSameDay(firstLogDay, day)) completedCount++;
-        continue;
-      }
-
-      if (
-        activity.frequencia === "dias_especificos" &&
-        !(activity.dias_semana ?? []).includes(isoWeekday)
-      ) {
-        continue;
-      }
-
-      applicableCount++;
-      if (logDays.some((logDay) => isSameDay(logDay, day))) completedCount++;
-    }
-
-    if (applicableCount === 0) {
+    if (applicable === 0) {
       day = addDays(day, -1);
       isToday = false;
       continue;
     }
 
-    const diaCumprido = completedCount * 2 >= applicableCount;
+    const diaCumprido = completed * 2 >= applicable;
 
     if (diaCumprido) {
       streak++;
@@ -131,11 +82,68 @@ export async function recalculateStreak(
       continue;
     }
 
+    const semana = inicioDaSemana(day).getTime();
+    const freezesUsados = freezesUsadosPorSemana.get(semana) ?? 0;
+
+    if (freezesUsados < MAX_FREEZES_POR_SEMANA) {
+      freezesUsadosPorSemana.set(semana, freezesUsados + 1);
+      streak++;
+      day = addDays(day, -1);
+      isToday = false;
+      continue;
+    }
+
     break;
   }
 
+  const semanaAtual = inicioDaSemana(hoje).getTime();
+  const freezesUsadosSemanaAtual = freezesUsadosPorSemana.get(semanaAtual) ?? 0;
+  const freezesDisponiveis = Math.max(
+    0,
+    MAX_FREEZES_POR_SEMANA - freezesUsadosSemanaAtual
+  );
+
+  return { streakAtual: streak, freezesDisponiveis };
+}
+
+/**
+ * Recalcula o streak geral do usuário a partir do histórico de activity_logs
+ * e grava o resultado em users.streak_atual / users.streak_freezes_disponiveis.
+ * Wrapper de I/O em torno de `computeStreak` (lógica pura, testada separadamente).
+ */
+export async function recalculateStreak(
+  supabase: SupabaseServerClient,
+  userId: string
+) {
+  const { data: user } = await supabase
+    .from("users")
+    .select("criado_em")
+    .eq("id", userId)
+    .single();
+
+  if (!user) return;
+
+  const accountCreatedDay = startOfDay(new Date(user.criado_em));
+  const hoje = startOfDay(new Date());
+
+  const { activities, logDaysByActivity } = await fetchActivitiesAndLogs(
+    supabase
+  );
+
+  const resultado = computeStreak({
+    activities,
+    logDaysByActivity,
+    accountCreatedDay,
+    hoje,
+  });
+
   await supabase
     .from("users")
-    .update({ streak_atual: streak })
+    .update({
+      streak_atual: resultado.streakAtual,
+      streak_freezes_disponiveis: resultado.freezesDisponiveis,
+    })
     .eq("id", userId);
+
+  return resultado;
 }

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import { CompleteActivityButton } from "./CompleteActivityButton";
+import { PendingActivityRow } from "./PendingActivityRow";
 
 const PESO_LABEL: Record<string, string> = {
   leve: "Leve",
@@ -25,6 +25,8 @@ export default async function MeuDiaPage() {
     .from("activities")
     .select("id, titulo, categoria, peso, frequencia, dias_semana")
     .eq("ativa", true);
+
+  const temAtividadesCadastradas = (activities ?? []).length > 0;
 
   const aplicaveisHoje = (activities ?? []).filter((activity) => {
     if (activity.frequencia === "diaria") return true;
@@ -80,14 +82,29 @@ export default async function MeuDiaPage() {
 
       {aplicaveisHoje.length === 0 ? (
         <p className="text-sm text-muted-foreground">
-          Nenhuma atividade para hoje.{" "}
-          <Link
-            href="/atividades/nova"
-            className="text-foreground underline underline-offset-4"
-          >
-            Cadastrar atividade
-          </Link>
-          .
+          {temAtividadesCadastradas ? (
+            <>
+              Nenhuma das suas atividades está programada para hoje. Confira{" "}
+              <Link
+                href="/atividades"
+                className="text-foreground underline underline-offset-4"
+              >
+                suas atividades
+              </Link>{" "}
+              para ver quando elas acontecem.
+            </>
+          ) : (
+            <>
+              Você ainda não cadastrou nenhuma atividade.{" "}
+              <Link
+                href="/atividades/nova"
+                className="text-foreground underline underline-offset-4"
+              >
+                Cadastrar a primeira
+              </Link>
+              .
+            </>
+          )}
         </p>
       ) : (
         <>
@@ -97,27 +114,17 @@ export default async function MeuDiaPage() {
             </h2>
             {pendentes.length === 0 ? (
               <p className="text-sm text-muted-foreground">
-                Nenhuma atividade pendente.
+                Tudo cumprido por hoje.
               </p>
             ) : (
               pendentes.map((activity) => (
-                <div
+                <PendingActivityRow
                   key={activity.id}
-                  className="flex items-center justify-between gap-4 rounded-md border border-border bg-surface px-4 py-3"
-                >
-                  <div className="flex flex-col gap-1">
-                    <p className="text-sm font-medium text-foreground">
-                      {activity.titulo}
-                    </p>
-                    <p className="text-sm text-muted-foreground">
-                      {activity.categoria}, {PESO_LABEL[activity.peso]}
-                    </p>
-                  </div>
-                  <CompleteActivityButton
-                    activityId={activity.id}
-                    titulo={activity.titulo}
-                  />
-                </div>
+                  activityId={activity.id}
+                  titulo={activity.titulo}
+                  categoria={activity.categoria}
+                  pesoLabel={PESO_LABEL[activity.peso]}
+                />
               ))
             )}
           </section>
@@ -130,6 +137,8 @@ export default async function MeuDiaPage() {
               {concluidas.map((activity) => (
                 <div
                   key={activity.id}
+                  data-testid="completed-activity-row"
+                  data-titulo={activity.titulo}
                   className="flex items-center justify-between gap-4 rounded-md border border-border bg-surface px-4 py-3 opacity-70"
                 >
                   <div className="flex flex-col gap-1">

@@ -3,6 +3,9 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { recalculateStreak } from "@/lib/streak";
+import { mensagemDeConclusao, mensagemDeConquista } from "@/lib/incentivo";
+import { calcularNivel } from "@/lib/nivel";
+import { checkAndUnlockAchievements } from "@/lib/achievements";
 
 // Janela de tempo permitida para desmarcar uma conclusão (item 2.3),
 // definida pelo usuário: 15 segundos, sincronizada com o toast de desfazer
@@ -58,18 +61,50 @@ export async function completeActivity(activityId: string) {
 
     const { data: user } = await supabase
       .from("users")
-      .select("pontos_totais")
+      .select("pontos_totais, streak_atual")
       .eq("id", userData.user.id)
       .single();
+
+    const novoPontosTotais = (user?.pontos_totais ?? 0) + pontosGanhos;
 
     if (user) {
       await supabase
         .from("users")
-        .update({ pontos_totais: user.pontos_totais + pontosGanhos })
+        .update({
+          pontos_totais: novoPontosTotais,
+          nivel: calcularNivel(novoPontosTotais),
+        })
         .eq("id", userData.user.id);
     }
 
-    await recalculateStreak(supabase, userData.user.id);
+    const { data: logAnterior } = await supabase
+      .from("activity_logs")
+      .select("id")
+      .eq("user_id", userData.user.id)
+      .lt("concluida_em", start.toISOString())
+      .limit(1);
+
+    const resultado = await recalculateStreak(supabase, userData.user.id);
+    const streakAtual = resultado?.streakAtual ?? 0;
+
+    const novasConquistas = await checkAndUnlockAchievements(
+      supabase,
+      userData.user.id,
+      streakAtual
+    );
+
+    revalidatePath("/");
+
+    return {
+      mensagem:
+        novasConquistas.length > 0
+          ? mensagemDeConquista(novasConquistas[0].titulo)
+          : mensagemDeConclusao({
+              streakAnterior: user?.streak_atual ?? 0,
+              streakAtual,
+              houveHistoricoAnterior: (logAnterior ?? []).length > 0,
+            }),
+    };
   }
 
   revalidatePath("/");
@@ -105,9 +140,13 @@ export async function uncompleteActivity(activityId: string) {
       .single();
 
     if (user) {
+      const novoPontosTotais = user.pontos_totais - pontosRevertidos;
       await supabase
         .from("users")
-        .update({ pontos_totais: user.pontos_totais - pontosRevertidos })
+        .update({
+          pontos_totais: novoPontosTotais,
+          nivel: calcularNivel(novoPontosTotais),
+        })
         .eq("id", userData.user.id);
     }
   }
