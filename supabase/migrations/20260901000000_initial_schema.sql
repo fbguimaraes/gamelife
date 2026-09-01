@@ -1,6 +1,6 @@
 -- Schema inicial do produto.
--- Fonte de verdade: CLAUDE.md Seção 5. Não adicionar, remover ou renomear
--- colunas sem antes atualizar aquele documento.
+-- Não adicionar, remover ou renomear colunas sem atualizar a documentação
+-- interna de modelo de dados do projeto.
 
 create table if not exists public.users (
   id uuid primary key references auth.users (id) on delete cascade,

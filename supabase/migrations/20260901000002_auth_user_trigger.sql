@@ -1,7 +1,6 @@
 -- Cria automaticamente a linha em public.users quando um usuário se
 -- cadastra via Supabase Auth (auth.users). Roda como SECURITY DEFINER para
 -- funcionar mesmo sem sessão ativa (ex: confirmação de e-mail pendente).
--- Decisão registrada em CLAUDE.md Seção 7 (item 1.6).
 
 create function public.handle_new_user()
 returns trigger

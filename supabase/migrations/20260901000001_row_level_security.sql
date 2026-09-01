@@ -1,5 +1,4 @@
--- Row Level Security: cada usuário só acessa seus próprios dados
--- (CLAUDE.md Seção 3, item "Autenticação de usuário" / Seção 6 item 1.5).
+-- Row Level Security: cada usuário só acessa seus próprios dados.
 
 alter table public.users enable row level security;
 alter table public.activities enable row level security;
