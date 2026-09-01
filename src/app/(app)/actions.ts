@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { recalculateStreak } from "@/lib/streak";
 
 // Janela de tempo permitida para desmarcar uma conclusão (item 2.3),
 // definida pelo usuário: 15 segundos, sincronizada com o toast de desfazer
@@ -67,6 +68,8 @@ export async function completeActivity(activityId: string) {
         .update({ pontos_totais: user.pontos_totais + pontosGanhos })
         .eq("id", userData.user.id);
     }
+
+    await recalculateStreak(supabase, userData.user.id);
   }
 
   revalidatePath("/");
@@ -108,6 +111,8 @@ export async function uncompleteActivity(activityId: string) {
         .eq("id", userData.user.id);
     }
   }
+
+  await recalculateStreak(supabase, userData.user.id);
 
   revalidatePath("/");
 }
