@@ -2,27 +2,28 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
-/* Nenhum elemento recebe a classe .dark neste app (sem modo escuro no
-   escopo — CLAUDE.md Seção 4). Isso neutraliza os utilitários `dark:`
-   embutidos nos componentes shadcn, evitando que o SO em modo escuro
-   ative parte deles via prefers-color-scheme por padrão do Tailwind. */
+/* Nenhum elemento recebe a classe .dark neste app — o tema escuro é o
+   único tema (fixo), não um alternável via prefers-color-scheme. Isso
+   neutraliza os utilitários `dark:` embutidos nos componentes shadcn. */
 @custom-variant dark (&:is(.dark *));
 
 /*
-  Tokens fixos — CLAUDE.md Seção 4. Fonte única de verdade da paleta.
-  Qualquer alteração de cor deve ser feita lá antes de ser aplicada aqui.
+  Tokens fixos — documentação interna de design do projeto é a fonte única
+  de verdade da paleta. Qualquer alteração de cor deve ser registrada lá
+  antes de ser aplicada aqui.
 */
 :root {
-  --bg: #efede6;
-  --surface: #ffffff;
-  --ink: #1f2420;
-  --ink-muted: #5c6259;
-  --accent: #3f5d42;
-  --accent-warm: #b08453;
-  --danger: #8c4a3d;
-  --border: #dad5c8;
+  --bg: #0d0e12;
+  --surface: #17181d;
+  --surface-raised: #1e1f26;
+  --ink: #f5f5f7;
+  --ink-muted: #9497a6;
+  --accent: #ff3b4e;
+  --accent-warm: #ffb020;
+  --danger: #ff7a45;
+  --border: #34363f;
 
-  --radius: 0.25rem;
+  --radius: 0.5rem;
 
   /* Mapeamento para os slots semânticos do shadcn/ui */
   --background: var(--bg);
@@ -32,20 +33,19 @@
   --popover: var(--surface);
   --popover-foreground: var(--ink);
   --primary: var(--accent);
-  --primary-foreground: var(--surface);
-  --secondary: var(--border);
+  --primary-foreground: var(--ink);
+  --secondary: var(--surface-raised);
   --secondary-foreground: var(--ink);
-  --muted: var(--border);
+  --muted: var(--surface-raised);
   --muted-foreground: var(--ink-muted);
   --destructive: var(--danger);
-  --destructive-foreground: var(--surface);
+  --destructive-foreground: var(--ink);
   --input: var(--border);
   --ring: var(--accent);
 
   /* Ainda não usados neste MVP (sem sidebar ou gráficos coloridos definidos
-     em CLAUDE.md Seção 4) — placeholders neutros do shadcn, mantidos apenas
-     para não deixar variáveis referenciadas sem valor. Revisar quando
-     Fase 3 (heatmap) ou navegação lateral forem implementadas. */
+     na paleta) — placeholders neutros do shadcn, mantidos apenas para não
+     deixar variáveis referenciadas sem valor. */
   --chart-1: oklch(0.87 0 0);
   --chart-2: oklch(0.556 0 0);
   --chart-3: oklch(0.439 0 0);
@@ -54,7 +54,7 @@
   --sidebar: var(--surface);
   --sidebar-foreground: var(--ink);
   --sidebar-primary: var(--accent);
-  --sidebar-primary-foreground: var(--surface);
+  --sidebar-primary-foreground: var(--ink);
   --sidebar-accent: var(--border);
   --sidebar-accent-foreground: var(--ink);
   --sidebar-border: var(--border);
@@ -65,8 +65,8 @@
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-inter);
-  --font-heading: var(--font-fraunces);
-  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --font-heading: var(--font-space-grotesk);
+  --font-mono: var(--font-jetbrains-mono);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -85,10 +85,15 @@
   --color-border: var(--border);
   --color-destructive: var(--destructive);
   /* Slot de hover/seleção do shadcn (bg-accent): tinta sutil derivada do
-     --accent da marca, não o tom sólido — evita um bloco verde saturado
+     --accent da marca, não o tom sólido — evita um bloco vermelho saturado
      em cada item de menu/hover. O --accent de marca em si nunca é alterado. */
   --color-accent-foreground: var(--ink);
-  --color-accent: color-mix(in oklab, var(--accent) 12%, var(--surface));
+  --color-accent: color-mix(in oklab, var(--accent) 16%, var(--surface));
+  /* --accent-warm (âmbar) é reservado para conquistas/marcos — exposto como
+     utilitário Tailwind próprio para não colidir com o slot `accent` acima
+     (que é o hover genérico do shadcn, sempre vermelho). */
+  --color-accent-warm: var(--accent-warm);
+  --color-surface-raised: var(--surface-raised);
   --color-muted-foreground: var(--muted-foreground);
   --color-muted: var(--muted);
   --color-secondary-foreground: var(--secondary-foreground);
